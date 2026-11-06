@@ -65,8 +65,396 @@ def get_latest_build(project, definition_id):
 
     return response.json()["value"][0]
 
+import json
+from bs4 import BeautifulSoup
+import re
+
 promise_to_pay_build_id = None
+promise_to_pay_build_url = None
 pipeline_results = {}
+pipeline_links = {}
+extracted_failed_scenarios = []
+extracted_skipped_scenarios = []
+
+
+def extract_full_assertion_error(error_msg, stack_trace=None):
+    """Extract complete assertion failure including 'Object: ... is missing' or status details."""
+    raw_source = stack_trace if (stack_trace and "assert" in stack_trace.lower()) else error_msg
+    if not raw_source:
+        return "No error message provided"
+
+    # Remove java.lang.AssertionError: prefix wherever it appears
+    raw_source = re.sub(r'java\.lang\.AssertionError:\s*', '', raw_source)
+
+    lines = [line.rstrip() for line in raw_source.strip().split("\n")]
+    result_lines = []
+
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("at ") or stripped.startswith("... ") or (stripped.startswith("Caused by:") and "Assertion" not in stripped):
+            break
+        if stripped:
+            result_lines.append(line)
+
+    if result_lines:
+        return "\n".join(result_lines)
+    return error_msg.strip() if error_msg else "No error message provided"
+
+
+def parse_request_body_step(step_text):
+    """Parse key-value pairs from Cucumber request body step into a JSON dictionary."""
+    pattern = r'(\w+)\s+"([^"]*)"'
+    matches = re.findall(pattern, step_text)
+    if not matches:
+        return None
+    data = {}
+    for key, val in matches:
+        if key in ["numberOfAdults", "numberOfChildren", "amount"]:
+            try:
+                data[key] = int(val)
+            except ValueError:
+                data[key] = val
+        elif key == "railcards":
+            if val:
+                data[key] = [r.strip() for r in val.split(",") if r.strip()]
+            else:
+                data[key] = []
+        else:
+            data[key] = val
+    return data
+
+
+def parse_promise_to_pay_failures(html_file):
+    """Extract failed scenarios, endpoints, and request bodies from Promise to Pay Cucumber HTML report."""
+    with open(html_file, "r", encoding="utf-8", errors="ignore") as f:
+        html = f.read()
+
+    soup = BeautifulSoup(html, "html.parser")
+    failed_scenarios = []
+
+    panels = soup.find_all("div", class_="panel")
+    for panel in panels:
+        danger_label = panel.find("span", class_="label-danger")
+        if danger_label and "Steps Failed" in danger_label.get("title", ""):
+            title_div = panel.find("div", class_="ellipsis")
+            scenario_name = title_div.get_text(strip=True) if title_div else "Unknown Scenario"
+
+            panel_text = panel.get_text()
+            endpoint = None
+            method = "POST"
+
+            endpoint_match = re.search(r"API Request Details\s*=\s*(POST|GET|PUT|DELETE)?\s*Request Endpoint\s*:\s*([^\s<]+)", panel_text, re.IGNORECASE)
+            if not endpoint_match:
+                endpoint_match = re.search(r"API Request Details\s*=\s*(POST|GET|PUT|DELETE)?\s*(.*?):\s*([^\s<]+)", panel_text, re.IGNORECASE)
+
+            if endpoint_match:
+                if endpoint_match.group(1):
+                    method = endpoint_match.group(1).upper()
+                endpoint = endpoint_match.group(len(endpoint_match.groups())).strip()
+
+            failed_step = None
+            error_message = None
+            request_body = None
+            asset_id = None
+
+            steps = panel.find_all("div", class_="steps")
+            for step in steps:
+                lbl = step.find("span", class_="label")
+                status = lbl.get("title") if lbl else ""
+                step_name_el = step.find("span", class_="stepname")
+                step_name = step_name_el.get_text(strip=True) if step_name_el else ""
+
+                if "request body having" in step_name.lower():
+                    request_body = parse_request_body_step(step_name)
+
+                if "assetid" in step_name.lower():
+                    asset_match = re.search(r'AssetId\s+"([^"]+)"', step_name, re.IGNORECASE)
+                    if asset_match:
+                        asset_id = asset_match.group(1)
+
+                if "Failed" in status or (lbl and "label-danger" in lbl.get("class", [])):
+                    kw = step.find("span", class_="keyword")
+                    kw_text = kw.get_text(strip=True) if kw else ""
+                    failed_step = f"{kw_text} {step_name}".strip()
+
+                    error_modal = step.find("div", class_="modal-body")
+                    if error_modal and error_modal.find("pre"):
+                        error_message = error_modal.find("pre").get_text(strip=True)
+                    else:
+                        coll = step.find("div", class_="collapse")
+                        if coll and coll.find("pre"):
+                            error_message = coll.find("pre").get_text(strip=True)
+
+            failed_scenarios.append({
+                "project": "Promise to Pay",
+                "scenario": scenario_name,
+                "failed_step": failed_step or "Unknown Step",
+                "error_message": extract_full_assertion_error(error_message),
+                "method": method,
+                "endpoint": endpoint or "https://ticketing-test.worldline.global/fulfil/promisetopay",
+                "asset_id": asset_id,
+                "request_body": request_body
+            })
+
+    return failed_scenarios
+
+
+def get_ado_failed_test_requests(project_name, project_id, build_id):
+    """Retrieve failed test scenarios, endpoints, and request bodies from ADO test runs & attachments."""
+    failed_details = []
+    try:
+        runs_url = (
+            f"https://dev.azure.com/{ORG}/{project_id}/_apis/test/runs"
+            f"?buildUri=vstfs:///Build/Build/{build_id}"
+            f"&api-version=7.1"
+        )
+        runs_resp = requests.get(runs_url, auth=HTTPBasicAuth("", PAT))
+        runs_resp.raise_for_status()
+        runs = runs_resp.json().get("value", [])
+
+        for run in runs:
+            run_id = run["id"]
+            results_url = (
+                f"https://dev.azure.com/{ORG}/{project_id}/_apis/test/Runs/{run_id}/results"
+                f"?api-version=7.1"
+            )
+            res_resp = requests.get(results_url, auth=HTTPBasicAuth("", PAT))
+            if res_resp.status_code != 200:
+                continue
+
+            results = res_resp.json().get("value", [])
+            for res in results:
+                if res.get("outcome") == "Failed":
+                    test_title = res.get("testCaseTitle") or res.get("automatedTestName") or "Unknown Test"
+                    error_msg = res.get("errorMessage") or "No error message"
+                    result_id = res.get("id")
+
+                    scenario_name = test_title
+                    match = re.search(r'runScenario\["([^"]+)"', test_title)
+                    if match:
+                        scenario_name = match.group(1)
+
+                    method = None
+                    endpoint = None
+                    request_body = None
+
+                    att_url = (
+                        f"https://dev.azure.com/{ORG}/{project_id}/_apis/test/runs/{run_id}/results/{result_id}/attachments"
+                        f"?api-version=7.1"
+                    )
+                    att_resp = requests.get(att_url, auth=HTTPBasicAuth("", PAT))
+                    if att_resp.status_code == 200:
+                        attachments = att_resp.json().get("value", [])
+                        for att in attachments:
+                            if att.get("fileName") == "Standard_Console_Output.log":
+                                download_url = att.get("url")
+                                log_resp = requests.get(download_url, auth=HTTPBasicAuth("", PAT))
+                                if log_resp.status_code == 200:
+                                    log_text = log_resp.text
+
+                                    req_matches = list(re.finditer(r"Request method:\s+([A-Z]+)\s+Request URI:\s+([^\s\n]+)", log_text))
+                                    chosen_req = None
+                                    for rm in req_matches:
+                                        if "oauth" not in rm.group(2).lower():
+                                            chosen_req = rm
+                                            break
+                                    if not chosen_req and req_matches:
+                                        chosen_req = req_matches[-1]
+
+                                    if chosen_req:
+                                        method = chosen_req.group(1)
+                                        endpoint = chosen_req.group(2)
+
+                                    body_match = re.search(r"Body:\s*\n(\{.*?\n\})\s*\n", log_text, re.DOTALL)
+                                    if body_match:
+                                        try:
+                                            request_body = json.loads(body_match.group(1))
+                                        except Exception:
+                                            request_body = body_match.group(1).strip()
+
+                    stack_trace = res.get("stackTrace")
+                    full_error = extract_full_assertion_error(error_msg, stack_trace)
+
+                    failed_details.append({
+                        "project": project_name,
+                        "test_case": test_title,
+                        "scenario": scenario_name,
+                        "error_message": full_error,
+                        "method": method or "GET",
+                        "endpoint": endpoint or "Endpoint not identified in logs",
+                        "request_body": request_body
+                    })
+
+    except Exception as ex:
+        print(f"  [ERROR] fetching failure logs for {project_name}: {ex}")
+
+    return failed_details
+
+
+def parse_promise_to_pay_skipped(html_file):
+    """Extract skipped scenarios, endpoints, and request bodies from Promise to Pay Cucumber HTML report."""
+    with open(html_file, "r", encoding="utf-8", errors="ignore") as f:
+        html = f.read()
+
+    soup = BeautifulSoup(html, "html.parser")
+    skipped_scenarios = []
+
+    panels = soup.find_all("div", class_="panel")
+    for panel in panels:
+        heading = panel.find("div", class_="panel-heading")
+        if not heading:
+            continue
+        labels = heading.find_all("span", class_="label")
+        titles = [l.get("title", "") for l in labels]
+        has_skipped = any("Steps Skipped" in t for t in titles)
+        has_failed = any("Steps Failed" in t for t in titles)
+
+        if has_skipped and not has_failed:
+            title_div = heading.find("div", class_="ellipsis")
+            scenario_name = title_div.get_text(strip=True) if title_div else "Unknown Scenario"
+
+            panel_text = panel.get_text()
+            endpoint = None
+            method = "POST"
+
+            endpoint_match = re.search(r"API Request Details\s*=\s*(POST|GET|PUT|DELETE)?\s*Request Endpoint\s*:\s*([^\s<]+)", panel_text, re.IGNORECASE)
+            if not endpoint_match:
+                endpoint_match = re.search(r"API Request Details\s*=\s*(POST|GET|PUT|DELETE)?\s*(.*?):\s*([^\s<]+)", panel_text, re.IGNORECASE)
+
+            if endpoint_match:
+                if endpoint_match.group(1):
+                    method = endpoint_match.group(1).upper()
+                endpoint = endpoint_match.group(len(endpoint_match.groups())).strip()
+
+            skipped_step = None
+            request_body = None
+            asset_id = None
+
+            steps = panel.find_all("div", class_="steps")
+            for step in steps:
+                lbl = step.find("span", class_="label")
+                status = lbl.get("title") if lbl else ""
+                step_name_el = step.find("span", class_="stepname")
+                step_name = step_name_el.get_text(strip=True) if step_name_el else ""
+
+                if "request body having" in step_name.lower():
+                    request_body = parse_request_body_step(step_name)
+
+                if "assetid" in step_name.lower():
+                    asset_match = re.search(r'AssetId\s+"([^"]+)"', step_name, re.IGNORECASE)
+                    if asset_match:
+                        asset_id = asset_match.group(1)
+
+                if "Skipped" in status and not skipped_step:
+                    kw = step.find("span", class_="keyword")
+                    kw_text = kw.get_text(strip=True) if kw else ""
+                    skipped_step = f"{kw_text} {step_name}".strip()
+
+            skipped_scenarios.append({
+                "project": "Promise to Pay",
+                "scenario": scenario_name,
+                "status": "Skipped",
+                "first_skipped_step": skipped_step or "Prerequisite step skipped",
+                "method": method,
+                "endpoint": endpoint or "https://ticketing-test.worldline.global/fulfil/promisetopay",
+                "asset_id": asset_id,
+                "request_body": request_body
+            })
+
+    return skipped_scenarios
+
+
+def get_ado_skipped_test_requests(project_name, project_id, build_id):
+    """Retrieve skipped/unexecuted test scenarios, endpoints, and reasons from ADO test runs."""
+    skipped_details = []
+    try:
+        runs_url = (
+            f"https://dev.azure.com/{ORG}/{project_id}/_apis/test/runs"
+            f"?buildUri=vstfs:///Build/Build/{build_id}"
+            f"&api-version=7.1"
+        )
+        runs_resp = requests.get(runs_url, auth=HTTPBasicAuth("", PAT))
+        runs_resp.raise_for_status()
+        runs = runs_resp.json().get("value", [])
+
+        for run in runs:
+            run_id = run["id"]
+            results_url = (
+                f"https://dev.azure.com/{ORG}/{project_id}/_apis/test/Runs/{run_id}/results"
+                f"?api-version=7.1"
+            )
+            res_resp = requests.get(results_url, auth=HTTPBasicAuth("", PAT))
+            if res_resp.status_code != 200:
+                continue
+
+            results = res_resp.json().get("value", [])
+            for res in results:
+                outcome = res.get("outcome")
+                if outcome not in ["Passed", "Failed"]:
+                    test_title = res.get("testCaseTitle") or res.get("automatedTestName") or "Unknown Test"
+                    error_msg = res.get("errorMessage") or f"Test status: {outcome}"
+                    result_id = res.get("id")
+
+                    scenario_name = test_title
+                    match = re.search(r'runScenario\["([^"]+)"', test_title)
+                    if match:
+                        scenario_name = match.group(1)
+
+                    method = "POST" if "POST" in scenario_name.upper() else ("PUT" if "PUT" in scenario_name.upper() else "GET")
+                    endpoint = None
+                    request_body = None
+
+                    att_url = (
+                        f"https://dev.azure.com/{ORG}/{project_id}/_apis/test/runs/{run_id}/results/{result_id}/attachments"
+                        f"?api-version=7.1"
+                    )
+                    att_resp = requests.get(att_url, auth=HTTPBasicAuth("", PAT))
+                    if att_resp.status_code == 200:
+                        attachments = att_resp.json().get("value", [])
+                        for att in attachments:
+                            if att.get("fileName") == "Standard_Console_Output.log":
+                                download_url = att.get("url")
+                                log_resp = requests.get(download_url, auth=HTTPBasicAuth("", PAT))
+                                if log_resp.status_code == 200:
+                                    log_text = log_resp.text
+                                    req_matches = list(re.finditer(r"Request method:\s+([A-Z]+)\s+Request URI:\s+([^\s\n]+)", log_text))
+                                    chosen_req = None
+                                    for rm in req_matches:
+                                        if "oauth" not in rm.group(2).lower():
+                                            chosen_req = rm
+                                            break
+                                    if not chosen_req and req_matches:
+                                        chosen_req = req_matches[-1]
+
+                                    if chosen_req:
+                                        method = chosen_req.group(1)
+                                        endpoint = chosen_req.group(2)
+
+                                    body_match = re.search(r"Body:\s*\n(\{.*?\n\})\s*\n", log_text, re.DOTALL)
+                                    if body_match:
+                                        try:
+                                            request_body = json.loads(body_match.group(1))
+                                        except Exception:
+                                            request_body = body_match.group(1).strip()
+
+                    stack_trace = res.get("stackTrace")
+                    full_reason = extract_full_assertion_error(error_msg, stack_trace)
+
+                    skipped_details.append({
+                        "project": project_name,
+                        "test_case": test_title,
+                        "scenario": scenario_name,
+                        "status": outcome,
+                        "reason": full_reason,
+                        "method": method,
+                        "endpoint": endpoint or "Endpoint inferred from scenario / not executed",
+                        "request_body": request_body
+                    })
+
+    except Exception as ex:
+        print(f"  [ERROR] fetching skipped logs for {project_name}: {ex}")
+
+    return skipped_details
 
 
 print("\nDAILY PIPELINE REPORT")
@@ -157,16 +545,23 @@ for pipeline in PIPELINES:
         )
 
         duration = finish - start
+        build_id = build["id"]
+        build_url = build.get("_links", {}).get("web", {}).get("href", f"https://dev.azure.com/{ORG}/{pipeline['project_id']}/_build/results?buildId={build_id}")
+        pipeline_links[pipeline["name"]] = {
+            "build_id": build_id,
+            "build_url": build_url
+        }
 
         print(f"\nProject : {pipeline['name']}")
-        print(f"Build ID: {build['id']}")
+        print(f"Build ID: {build_id}")
+        print(f"Build URL: {build_url}")
         print(f"Result  : {build.get('result')}")
 
         if pipeline["name"] != "Promise to Pay":
 
             summary = get_test_summary(
                 pipeline["project_id"],
-                build["id"]
+                build_id
             )
 #added now(Optional)
             print(f"Raw Duration: {summary['duration']}")
@@ -184,11 +579,26 @@ for pipeline in PIPELINES:
             "failed": summary["failed"],
             "others": summary["others"],
             "total": summary["total"],
-            "duration": format_pipeline_duration(duration)
+            "duration": format_pipeline_duration(duration),
+            "build_id": build_id,
+            "build_url": build_url
             }
 
+            if summary["failed"] > 0:
+                print(f"  Fetching failed scenario details, endpoints & request bodies for {pipeline['name']}...")
+                ado_fails = get_ado_failed_test_requests(pipeline["name"], pipeline["project_id"], build_id)
+                extracted_failed_scenarios.extend(ado_fails)
+                print(f"  Extracted {len(ado_fails)} failed scenario(s) from {pipeline['name']}.")
+
+            if summary["others"] > 0:
+                print(f"  Fetching skipped scenario details & endpoints for {pipeline['name']}...")
+                ado_skipped = get_ado_skipped_test_requests(pipeline["name"], pipeline["project_id"], build_id)
+                extracted_skipped_scenarios.extend(ado_skipped)
+                print(f"  Extracted {len(ado_skipped)} skipped scenario(s) from {pipeline['name']}.")
+
         else:
-            promise_to_pay_build_id = build["id"]
+            promise_to_pay_build_id = build_id
+            promise_to_pay_build_url = build_url
             print(f"Pipeline Duration: {duration}")
             print("Promise to Pay values will come from Cucumber Report")
             print(f"Promise To Pay Build ID: {promise_to_pay_build_id}")
@@ -337,6 +747,18 @@ if not cards:
         "No scenario cards found in Promise To Pay report"
     )
 
+if int(results.get("Failed Scenarios", 0)) > 0:
+    print("\n  Fetching failed scenario details, endpoints & request bodies for Promise to Pay...")
+    p2p_fails = parse_promise_to_pay_failures(html_file)
+    extracted_failed_scenarios.extend(p2p_fails)
+    print(f"  Extracted {len(p2p_fails)} failed scenario(s) from Promise to Pay.")
+
+if int(results.get("Skipped Scenarios", 0)) > 0:
+    print("\n  Fetching skipped scenario details, endpoints & request bodies for Promise to Pay...")
+    p2p_skipped = parse_promise_to_pay_skipped(html_file)
+    extracted_skipped_scenarios.extend(p2p_skipped)
+    print(f"  Extracted {len(p2p_skipped)} skipped scenario(s) from Promise to Pay.")
+
 
 from openpyxl import load_workbook
 
@@ -358,7 +780,9 @@ ws["F3"] = rds.get("failed", 0)
 ws["G3"] = rds.get("others", 0)
 ws["H3"] = rds.get("total", 0)
 ws["I3"] = rds.get("duration", "")
-
+if rds.get("build_id"):
+    ws["K3"].value = f"Pipelines - Run {rds.get('build_id')}"
+    ws["K3"].hyperlink = rds.get("build_url")
 
 
 # Promise To Pay - Row 4
@@ -372,6 +796,9 @@ ws["F4"] = results.get("Failed Scenarios", 0)
 ws["G4"] = results.get("Skipped Scenarios", 0)
 ws["H4"] = results.get("All Scenarios", 0)
 ws["I4"] = duration
+if promise_to_pay_build_id:
+    ws["K4"].value = f"Pipelines - Run {promise_to_pay_build_id}"
+    ws["K4"].hyperlink = promise_to_pay_build_url
 
 
 # LSM - Row 5
@@ -385,6 +812,9 @@ ws["F5"] = lsm.get("failed", 0)
 ws["G5"] = lsm.get("others", 0)
 ws["H5"] = lsm.get("total", 0)
 ws["I5"] = lsm.get("duration", "")
+if lsm.get("build_id"):
+    ws["K5"].value = f"Pipelines - Run {lsm.get('build_id')}"
+    ws["K5"].hyperlink = lsm.get("build_url")
 
 # RARS - Row 6
 rars = pipeline_results.get("RARS (V2)", {})
@@ -397,6 +827,9 @@ ws["F6"] = rars.get("failed", 0)
 ws["G6"] = rars.get("others", 0)
 ws["H6"] = rars.get("total", 0)
 ws["I6"] = rars.get("duration", "")
+if rars.get("build_id"):
+    ws["K6"].value = f"Pipelines - Run {rars.get('build_id')}"
+    ws["K6"].hyperlink = rars.get("build_url")
 
 
 print("\nParsed Results:")
@@ -406,9 +839,107 @@ print("Failed  :", results.get("Failed Scenarios"))
 print("Skipped :", results.get("Skipped Scenarios"))
 print("Duration:", duration)
 
+print("\n" + "=" * 70)
+print("PROJECT PIPELINE REPORT LINKS")
+print("=" * 70)
+print(f"RDS: Pipelines - Run {rds.get('build_id')} ({rds.get('build_url')})")
+print(f"Promise to Pay: Pipelines - Run {promise_to_pay_build_id} ({promise_to_pay_build_url})")
+print(f"LSM: Pipelines - Run {lsm.get('build_id')} ({lsm.get('build_url')})")
+print(f"RARS: Pipelines - Run {rars.get('build_id')} ({rars.get('build_url')})")
+
+# Export separate files for links
+link_items = [
+    {"name": "RDS", "build_id": rds.get("build_id"), "url": rds.get("build_url")},
+    {"name": "Promise to Pay", "build_id": promise_to_pay_build_id, "url": promise_to_pay_build_url},
+    {"name": "LSM", "build_id": lsm.get("build_id"), "url": lsm.get("build_url")},
+    {"name": "RARS", "build_id": rars.get("build_id"), "url": rars.get("build_url")}
+]
+
+html_links_file = os.path.join(BASE_DIR, "pipeline_links.html")
+with open(html_links_file, "w", encoding="utf-8") as f:
+    f.write('<!DOCTYPE html>\n<html>\n<head>\n<meta charset="utf-8">\n<title>Pipeline Report Links</title>\n')
+    f.write('<style>body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 25px; line-height: 1.8; font-size: 16px; }\n')
+    f.write('.item { margin-bottom: 10px; } .proj { font-weight: bold; display: inline-block; width: 140px; } a { color: #0078d4; text-decoration: underline; }</style>\n')
+    f.write('</head>\n<body>\n<h3>Pipeline Report Links</h3>\n')
+    for item in link_items:
+        f.write(f'  <div class="item"><span class="proj">{item["name"]}:</span> <a href="{item["url"]}" target="_blank">Pipelines - Run {item["build_id"]}</a></div>\n')
+    f.write('</body>\n</html>')
+
+md_links_file = os.path.join(BASE_DIR, "pipeline_links.md")
+with open(md_links_file, "w", encoding="utf-8") as f:
+    f.write("# Pipeline Report Links\n\n")
+    for item in link_items:
+        f.write(f"- **{item['name']}**: [Pipelines - Run {item['build_id']}]({item['url']})\n")
+
+print(f"\n[INFO] Pipeline links exported to:\n  HTML: {html_links_file}\n  Markdown: {md_links_file}")
+
 try:
     wb.save(EXCEL_FILE)
     print("Excel Updated Successfully")
 except PermissionError:
     print(f"\n[ERROR] Permission denied: '{EXCEL_FILE}' is currently open in Excel.")
     print("Please close the Excel file and re-run the script.")
+
+# DISPLAY & EXPORT FAILED SCENARIOS FOR MANUAL EXECUTION
+if extracted_failed_scenarios:
+    print("\n" + "=" * 70)
+    print("FAILED SCENARIOS EXTRACTED FOR MANUAL EXECUTION")
+    print("=" * 70)
+    for idx, item in enumerate(extracted_failed_scenarios, 1):
+        print(f"\n[{idx}] Project     : {item.get('project')}")
+        print(f"    Scenario    : {item.get('scenario')}")
+        if item.get("failed_step"):
+            print(f"    Failed Step : {item.get('failed_step')}")
+        err = item.get("error_message", "")
+        if "\n" in err:
+            err_indented = err.replace("\n", "\n                  ")
+            print(f"    Error Msg   : {err_indented}")
+        else:
+            print(f"    Error Msg   : {err}")
+        print(f"    Endpoint    : {item.get('method')} {item.get('endpoint')}")
+        if item.get("asset_id"):
+            print(f"    Asset ID    : {item.get('asset_id')}")
+        if item.get("request_body"):
+            print(f"    Request Body:\n{json.dumps(item.get('request_body'), indent=6)}")
+        else:
+            print("    Request Body: None")
+
+    output_file = os.path.join(BASE_DIR, "failed_scenarios_for_manual_run.json")
+    with open(output_file, "w", encoding="utf-8") as f:
+        json.dump(extracted_failed_scenarios, f, indent=2)
+    print("\n" + "=" * 70)
+    print(f"[SUCCESS] All {len(extracted_failed_scenarios)} failed scenario request payload(s) exported to:")
+    print(f"  {output_file}")
+    print("=" * 70)
+
+# DISPLAY & EXPORT SKIPPED SCENARIOS FOR MANUAL EXECUTION
+if extracted_skipped_scenarios:
+    print("\n" + "=" * 70)
+    print("SKIPPED SCENARIOS EXTRACTED FOR MANUAL EXECUTION")
+    print("=" * 70)
+    for idx, item in enumerate(extracted_skipped_scenarios, 1):
+        print(f"\n[{idx}] Project     : {item.get('project')}")
+        print(f"    Scenario    : {item.get('scenario')}")
+        if item.get("first_skipped_step"):
+            print(f"    Skipped Step: {item.get('first_skipped_step')}")
+        reason = item.get("reason", "")
+        if "\n" in reason:
+            reason_indented = reason.replace("\n", "\n                  ")
+            print(f"    Reason      : {reason_indented}")
+        elif reason:
+            print(f"    Reason      : {reason}")
+        print(f"    Endpoint    : {item.get('method')} {item.get('endpoint')}")
+        if item.get("asset_id"):
+            print(f"    Asset ID    : {item.get('asset_id')}")
+        if item.get("request_body"):
+            print(f"    Request Body:\n{json.dumps(item.get('request_body'), indent=6)}")
+        else:
+            print("    Request Body: None")
+
+    skipped_output_file = os.path.join(BASE_DIR, "skipped_scenarios_for_manual_run.json")
+    with open(skipped_output_file, "w", encoding="utf-8") as f:
+        json.dump(extracted_skipped_scenarios, f, indent=2)
+    print("\n" + "=" * 70)
+    print(f"[SUCCESS] All {len(extracted_skipped_scenarios)} skipped scenario request payload(s) exported to:")
+    print(f"  {skipped_output_file}")
+    print("=" * 70)

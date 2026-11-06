@@ -1,0 +1,100 @@
+[
+  {
+    "project": "RARS (V2)",
+    "test_case": "runScenario[\"Verify post weekend booking via API POST\", \"Test the bookings API on Portal\"](10)",
+    "scenario": "Verify post weekend booking via API POST",
+    "status": "NotExecuted",
+    "reason": "got: <java.lang.Throwable: retry limit exceeds, booking creation failed with status code 400 due to booking not available. Please try again later>, expected: null",
+    "method": "POST",
+    "endpoint": "Endpoint inferred from scenario / not executed",
+    "request_body": null
+  },
+  {
+    "project": "Promise to Pay",
+    "scenario": "Validate the newly created endpoint /fulfil/promisetopay for \"ETICKET\"",
+    "status": "Skipped",
+    "first_skipped_step": "And Verify promiseToPay is enabled for the ticketType \"SVR\" and AssetId \"2944\"",
+    "method": "POST",
+    "endpoint": "https://ticketing-test.worldline.global/fulfil/promisetopay",
+    "asset_id": "2944",
+    "request_body": {
+      "origin": "6216",
+      "destination": "3230",
+      "ticketType": "SVR",
+      "route": "00000",
+      "numberOfAdults": 4,
+      "numberOfChildren": 4,
+      "amount": 400,
+      "ticketFormat": "ETICKET",
+      "paymentMethod": "ANY",
+      "railcards": []
+    }
+  },
+  {
+    "project": "Promise to Pay",
+    "scenario": "Validate the newly created endpoint /fulfil/promisetopay for \"CCST\"",
+    "status": "Skipped",
+    "first_skipped_step": "And Verify promiseToPay is enabled for the ticketType \"SDR\" and AssetId \"2944\"",
+    "method": "POST",
+    "endpoint": "https://ticketing-test.worldline.global/fulfil/promisetopay",
+    "asset_id": "2944",
+    "request_body": {
+      "origin": "6216",
+      "destination": "3230",
+      "ticketType": "SDR",
+      "route": "00000",
+      "numberOfAdults": 1,
+      "numberOfChildren": 1,
+      "amount": 100,
+      "ticketFormat": "CCST",
+      "paymentMethod": "ANY",
+      "railcards": [
+        "YNG"
+      ]
+    }
+  },
+  {
+    "project": "Promise to Pay",
+    "scenario": "Validate the promise to pay reverse endpoint for \"ETICKET\"",
+    "status": "Skipped",
+    "first_skipped_step": "And Verify promiseToPay is enabled for the ticketType \"SVR\" and AssetId \"2944\"",
+    "method": "POST",
+    "endpoint": "https://ticketing-test.worldline.global/fulfil/promisetopay",
+    "asset_id": "2944",
+    "request_body": {
+      "origin": "6216",
+      "destination": "3231",
+      "ticketType": "SVR",
+      "route": "00000",
+      "numberOfAdults": 1,
+      "numberOfChildren": 1,
+      "amount": 100,
+      "ticketFormat": "ETICKET",
+      "paymentMethod": "ANY",
+      "railcards": []
+    }
+  },
+  {
+    "project": "Promise to Pay",
+    "scenario": "Validate the promise to pay reverse endpoint for \"CCST\"",
+    "status": "Skipped",
+    "first_skipped_step": "And Verify promiseToPay is enabled for the ticketType \"SDR\" and AssetId \"2944\"",
+    "method": "POST",
+    "endpoint": "https://ticketing-test.worldline.global/fulfil/promisetopay",
+    "asset_id": "2944",
+    "request_body": {
+      "origin": "6216",
+      "destination": "3230",
+      "ticketType": "SDR",
+      "route": "00000",
+      "numberOfAdults": 1,
+      "numberOfChildren": 1,
+      "amount": 100,
+      "ticketFormat": "CCST",
+      "paymentMethod": "ANY",
+      "railcards": [
+        "2TR"
+      ]
+    }
+  }
+]

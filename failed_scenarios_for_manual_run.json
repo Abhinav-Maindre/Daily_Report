@@ -1,0 +1,406 @@
+[
+  {
+    "project": "RDS",
+    "test_case": "runScenario[\"Verify the response of rcs/location endpoint\", \"RDS RCS data search\"](13)",
+    "scenario": "Verify the response of rcs/location endpoint",
+    "error_message": "The following asserts failed:\n\tObject: CRS is missing in the response",
+    "method": "GET",
+    "endpoint": "http://nr-ref-data-test.worldline.global/query/rcs/location",
+    "request_body": null
+  },
+  {
+    "project": "RDS",
+    "test_case": "runScenario[\"Verify the response of lennon/discount-codes endpoint\", \"RDS Lennon data search\"](7)",
+    "scenario": "Verify the response of lennon/discount-codes endpoint",
+    "error_message": "The following asserts failed:\n\tAttribute DiscountCode is missing in the response,\n\tAttribute DiscountCode is missing in the response,\n\tAttribute DiscountCode is missing in the response",
+    "method": "GET",
+    "endpoint": "http://nr-ref-data-test.worldline.global/query/lennon/discount-codes",
+    "request_body": null
+  },
+  {
+    "project": "RARS (V2)",
+    "test_case": "runScenario[\"Verify required product issues with bikes in booking status response\", \"Test the bookings API on Adapter\"](35)",
+    "scenario": "Verify required product issues with bikes in booking status response",
+    "error_message": "Condition with project.stepdefinition.BookingsTestStepdefinition was not fulfilled within 2 minutes.",
+    "method": "POST",
+    "endpoint": "https://rars-adapter-test.worldline.global/v2/api/bookings",
+    "request_body": {
+      "uniqueTicketNumber": "",
+      "passengers": [
+        {
+          "firstName": "passenger_1",
+          "lastName": "",
+          "protectPrivacy": true,
+          "disabilityType": null,
+          "phoneNumber": "",
+          "id": "passenger_1",
+          "title": "",
+          "email": "passenger_1@yopmail.com",
+          "statusCode": "000",
+          "discountedOrSeasonCode": null
+        },
+        {
+          "firstName": "passenger_2",
+          "lastName": "",
+          "protectPrivacy": true,
+          "disabilityType": null,
+          "phoneNumber": "",
+          "id": "passenger_2",
+          "title": "",
+          "email": "passenger_2@yopmail.com",
+          "statusCode": "000",
+          "discountedOrSeasonCode": null
+        }
+      ],
+      "retailersBookingRef": null,
+      "legs": [
+        {
+          "routeCode": "00000",
+          "carrierCode": "GW",
+          "alightLocation": "BRI",
+          "rsid": "GW431500",
+          "journeyConditions": {
+            "journeyOD": {
+              "journeyDestination": "3526",
+              "journeyOrigin": "3087"
+            }
+          },
+          "boardLocation": "PAD",
+          "serviceOriginDate": "2026-11-10",
+          "seatProducts": [
+            {
+              "seat": null,
+              "tariffCode": "500-SDS-S01_1",
+              "passengerId": "passenger_1",
+              "seatPreferences": [
+                "BIKE"
+              ]
+            },
+            {
+              "seat": null,
+              "tariffCode": "500-SDS-S01_1",
+              "passengerId": "passenger_2",
+              "seatPreferences": [
+                "BIKE"
+              ]
+            },
+            {
+              "seat": null,
+              "tariffCode": "700-BIK-BIK",
+              "passengerId": "passenger_1",
+              "seatPreferences": [
+                "BIKE"
+              ]
+            }
+          ],
+          "direction": "OUTBOUND",
+          "serviceIdentifier": "0:R|GW431500|TRAIN|2026-11-10"
+        }
+      ],
+      "customer": {
+        "firstName": "Agent1",
+        "lastName": "",
+        "phoneNumber": "",
+        "initials": "Mr.",
+        "title": "",
+        "email": "agent1@yopmail.com"
+      }
+    }
+  },
+  {
+    "project": "Promise to Pay",
+    "scenario": "Validate the newly created endpoint /fulfil/promisetopay for \"ETICKET\"",
+    "failed_step": "Then Verify the status code is \"200\"",
+    "error_message": "The following asserts failed:\n\tStatus code is not as expected expected [200] but found [400]",
+    "method": "POST",
+    "endpoint": "https://ticketing-test.worldline.global/fulfil/promisetopay",
+    "asset_id": "2944",
+    "request_body": {
+      "origin": "6216",
+      "destination": "3231",
+      "ticketType": "2FB",
+      "route": "00000",
+      "numberOfAdults": 1,
+      "numberOfChildren": 1,
+      "amount": 100,
+      "ticketFormat": "ETICKET",
+      "paymentMethod": "CASH",
+      "railcards": [
+        "YNG",
+        "2TR"
+      ]
+    }
+  },
+  {
+    "project": "Promise to Pay",
+    "scenario": "Validate the newly created endpoint /fulfil/promisetopay for \"ETICKET\"",
+    "failed_step": "Then Verify the status code is \"200\"",
+    "error_message": "The following asserts failed:\n\tStatus code is not as expected expected [200] but found [400]",
+    "method": "POST",
+    "endpoint": "https://ticketing-test.worldline.global/fulfil/promisetopay",
+    "asset_id": "2944",
+    "request_body": {
+      "origin": "1444",
+      "destination": "1215",
+      "ticketType": "2FB",
+      "route": "00000",
+      "numberOfAdults": 2,
+      "numberOfChildren": 2,
+      "amount": 200,
+      "ticketFormat": "ETICKET",
+      "paymentMethod": "CASH",
+      "railcards": []
+    }
+  },
+  {
+    "project": "Promise to Pay",
+    "scenario": "Validate the newly created endpoint /fulfil/promisetopay for \"ETICKET\"",
+    "failed_step": "Then Verify the status code is \"200\"",
+    "error_message": "The following asserts failed:\n\tStatus code is not as expected expected [200] but found [400]",
+    "method": "POST",
+    "endpoint": "https://ticketing-test.worldline.global/fulfil/promisetopay",
+    "asset_id": "2944",
+    "request_body": {
+      "origin": "1165",
+      "destination": "1625",
+      "ticketType": "2FB",
+      "route": "00000",
+      "numberOfAdults": 3,
+      "numberOfChildren": 3,
+      "amount": 300,
+      "ticketFormat": "ETICKET",
+      "paymentMethod": "CASH",
+      "railcards": [
+        "2TR"
+      ]
+    }
+  },
+  {
+    "project": "Promise to Pay",
+    "scenario": "Validate the newly created endpoint /fulfil/promisetopay for \"CCST\"",
+    "failed_step": "Then Verify the status code is \"200\"",
+    "error_message": "The following asserts failed:\n\tStatus code is not as expected expected [200] but found [400]",
+    "method": "POST",
+    "endpoint": "https://ticketing-test.worldline.global/fulfil/promisetopay",
+    "asset_id": "2944",
+    "request_body": {
+      "origin": "6216",
+      "destination": "3230",
+      "ticketType": "2FB",
+      "route": "00000",
+      "numberOfAdults": 1,
+      "numberOfChildren": 1,
+      "amount": 100,
+      "ticketFormat": "CCST",
+      "paymentMethod": "CASH",
+      "railcards": [
+        "2TR"
+      ]
+    }
+  },
+  {
+    "project": "Promise to Pay",
+    "scenario": "Validate the p2p not enabled error for ticket type \"ETICKET\"",
+    "failed_step": "And Validate the promisetopay error code as \"1805\" and error message as \"Promise to pay is not enabled.\"",
+    "error_message": "The following asserts failed:\n\tError code is not matching expected [1805] but found [1803],\n\tError message is not matching expected [Promise to pay is not enabled.] but found [No configuration data found for the request.]",
+    "method": "POST",
+    "endpoint": "https://ticketing-test.worldline.global/fulfil/promisetopay",
+    "asset_id": "2944",
+    "request_body": {
+      "origin": "6216",
+      "destination": "3231",
+      "ticketType": "SSR",
+      "route": "00000",
+      "numberOfAdults": 1,
+      "numberOfChildren": 1,
+      "amount": 100,
+      "ticketFormat": "ETICKET",
+      "paymentMethod": "CASH",
+      "railcards": []
+    }
+  },
+  {
+    "project": "Promise to Pay",
+    "scenario": "Validate the p2p not enabled error for ticket type \"CCST\"",
+    "failed_step": "And Validate the promisetopay error code as \"1805\" and error message as \"Promise to pay is not enabled.\"",
+    "error_message": "The following asserts failed:\n\tError code is not matching expected [1805] but found [1803],\n\tError message is not matching expected [Promise to pay is not enabled.] but found [No configuration data found for the request.]",
+    "method": "POST",
+    "endpoint": "https://ticketing-test.worldline.global/fulfil/promisetopay",
+    "asset_id": "2944",
+    "request_body": {
+      "origin": "6216",
+      "destination": "3231",
+      "ticketType": "SSR",
+      "route": "00000",
+      "numberOfAdults": 2,
+      "numberOfChildren": 2,
+      "amount": 400,
+      "ticketFormat": "CCST",
+      "paymentMethod": "ANY",
+      "railcards": [
+        "YNG"
+      ]
+    }
+  },
+  {
+    "project": "Promise to Pay",
+    "scenario": "Validate the error message when unsupported ticket format is an input in /fulfil/promisetopay endpoint",
+    "failed_step": "And Validate the promisetopay error code as \"1800\" and error message as \"One or more invalid values or null or empty found in ticketFormats. Valid values are CCST, ETICKET.\"",
+    "error_message": "The following asserts failed:\n\tError message is not matching expected [One or more invalid values or null or empty found in ticketFormats. Valid values are CCST, ETICKET.] but found [One or more invalid values or null or empty found in ticketFormats. Valid values are CCST, ETICKET, PRT.]",
+    "method": "POST",
+    "endpoint": "https://ticketing-test.worldline.global/fulfil/promisetopay",
+    "asset_id": "2944",
+    "request_body": {
+      "origin": "6216",
+      "destination": "3231",
+      "ticketType": "2FB",
+      "route": "00000",
+      "numberOfAdults": 1,
+      "numberOfChildren": 1,
+      "amount": 100,
+      "ticketFormat": "ITSO",
+      "paymentMethod": "CASH",
+      "railcards": [
+        "YNG",
+        "2TR"
+      ]
+    }
+  },
+  {
+    "project": "Promise to Pay",
+    "scenario": "Validate the error message when incorrect origin entered in /fulfil/promisetopay endpoint",
+    "failed_step": "Then Verify the status code is \"400\"",
+    "error_message": "The following asserts failed:\n\tStatus code is not as expected expected [400] but found [500]",
+    "method": "POST",
+    "endpoint": "https://ticketing-test.worldline.global/fulfil/promisetopay",
+    "asset_id": "2944",
+    "request_body": {
+      "origin": "621",
+      "destination": "3231",
+      "ticketType": "2FB",
+      "route": "00000",
+      "numberOfAdults": 1,
+      "numberOfChildren": 1,
+      "amount": 800,
+      "ticketFormat": "ETICKET",
+      "paymentMethod": "CASH",
+      "railcards": [
+        "YNG"
+      ]
+    }
+  },
+  {
+    "project": "Promise to Pay",
+    "scenario": "Validate the error message when incorrect origin entered in /fulfil/promisetopay endpoint",
+    "failed_step": "Then Verify the status code is \"400\"",
+    "error_message": "The following asserts failed:\n\tStatus code is not as expected expected [400] but found [500]",
+    "method": "POST",
+    "endpoint": "https://ticketing-test.worldline.global/fulfil/promisetopay",
+    "asset_id": "2944",
+    "request_body": {
+      "origin": "62133",
+      "destination": "3231",
+      "ticketType": "2FB",
+      "route": "00000",
+      "numberOfAdults": 2,
+      "numberOfChildren": 2,
+      "amount": 400,
+      "ticketFormat": "CCST",
+      "paymentMethod": "CASH",
+      "railcards": [
+        "YNG"
+      ]
+    }
+  },
+  {
+    "project": "Promise to Pay",
+    "scenario": "Validate the error message when incorrect destination entered in /fulfil/promisetopay endpoint",
+    "failed_step": "Then Verify the status code is \"400\"",
+    "error_message": "The following asserts failed:\n\tStatus code is not as expected expected [400] but found [500]",
+    "method": "POST",
+    "endpoint": "https://ticketing-test.worldline.global/fulfil/promisetopay",
+    "asset_id": "2944",
+    "request_body": {
+      "origin": "6216",
+      "destination": "32311",
+      "ticketType": "2FB",
+      "route": "00000",
+      "numberOfAdults": 1,
+      "numberOfChildren": 1,
+      "amount": 800,
+      "ticketFormat": "ETICKET",
+      "paymentMethod": "CASH",
+      "railcards": [
+        "YNG"
+      ]
+    }
+  },
+  {
+    "project": "Promise to Pay",
+    "scenario": "Validate the error message when incorrect destination entered in /fulfil/promisetopay endpoint",
+    "failed_step": "Then Verify the status code is \"400\"",
+    "error_message": "The following asserts failed:\n\tStatus code is not as expected expected [400] but found [500]",
+    "method": "POST",
+    "endpoint": "https://ticketing-test.worldline.global/fulfil/promisetopay",
+    "asset_id": "2944",
+    "request_body": {
+      "origin": "6216",
+      "destination": "323",
+      "ticketType": "2FB",
+      "route": "00000",
+      "numberOfAdults": 1,
+      "numberOfChildren": 1,
+      "amount": 200,
+      "ticketFormat": "CCST",
+      "paymentMethod": "CASH",
+      "railcards": []
+    }
+  },
+  {
+    "project": "Promise to Pay",
+    "scenario": "Validate the promise to pay reverse endpoint for \"ETICKET\"",
+    "failed_step": "Then Verify the status code is \"200\"",
+    "error_message": "The following asserts failed:\n\tStatus code is not as expected expected [200] but found [400]",
+    "method": "POST",
+    "endpoint": "https://ticketing-test.worldline.global/fulfil/promisetopay",
+    "asset_id": "2944",
+    "request_body": {
+      "origin": "6216",
+      "destination": "3231",
+      "ticketType": "2FB",
+      "route": "00000",
+      "numberOfAdults": 1,
+      "numberOfChildren": 1,
+      "amount": 100,
+      "ticketFormat": "ETICKET",
+      "paymentMethod": "CASH",
+      "railcards": [
+        "YNG",
+        "2TR"
+      ]
+    }
+  },
+  {
+    "project": "Promise to Pay",
+    "scenario": "Validate the promise to pay reverse endpoint for \"CCST\"",
+    "failed_step": "Then Verify the status code is \"200\"",
+    "error_message": "The following asserts failed:\n\tStatus code is not as expected expected [200] but found [400]",
+    "method": "POST",
+    "endpoint": "https://ticketing-test.worldline.global/fulfil/promisetopay",
+    "asset_id": "2944",
+    "request_body": {
+      "origin": "6216",
+      "destination": "3230",
+      "ticketType": "2FB",
+      "route": "00000",
+      "numberOfAdults": 2,
+      "numberOfChildren": 1,
+      "amount": 500,
+      "ticketFormat": "CCST",
+      "paymentMethod": "CASH",
+      "railcards": [
+        "2TR"
+      ]
+    }
+  }
+]
