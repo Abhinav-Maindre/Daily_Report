@@ -871,7 +871,96 @@ with open(md_links_file, "w", encoding="utf-8") as f:
     for item in link_items:
         f.write(f"- **{item['name']}**: [Pipelines - Run {item['build_id']}]({item['url']})\n")
 
-print(f"\n[INFO] Pipeline links exported to:\n  HTML: {html_links_file}\n  Markdown: {md_links_file}")
+# Also update teams_message.html and teams_message.md with bullet points
+today_str = datetime.now().strftime("%d-%m-%Y")
+teams_html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Teams Ready Message</title>
+    <style>
+        body {{
+            font-family: 'Segoe UI', Arial, sans-serif;
+            font-size: 15px;
+            color: #242424;
+            padding: 30px;
+            line-height: 1.6;
+            background-color: #f5f5f5;
+        }}
+        .card {{
+            background: #ffffff;
+            border: 1px solid #e1dfdd;
+            border-radius: 8px;
+            padding: 24px;
+            max-width: 650px;
+            margin: 0 auto;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        }}
+        ul {{
+            margin-top: 8px;
+            margin-bottom: 8px;
+            padding-left: 20px;
+            line-height: 1.8;
+        }}
+        li {{
+            margin-bottom: 4px;
+        }}
+        a {{
+            color: #5b5fc7;
+            text-decoration: underline;
+            font-weight: 600;
+        }}
+        a:hover {{
+            color: #444791;
+        }}
+        .hint {{
+            margin-top: 24px;
+            padding: 10px;
+            background-color: #f0f4f8;
+            border-left: 4px solid #5b5fc7;
+            font-size: 13px;
+            color: #555;
+        }}
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div>Hi All, below are automation test reports for each feature/project: {today_str}</div>
+        <br><br>
+        <div><strong>Pipelines:</strong></div>
+        <ul>
+"""
+for item in link_items:
+    teams_html_content += f'            <li>{item["name"]}: <a href="{item["url"]}" target="_blank">Pipelines - Run {item["build_id"]}</a></li>\n'
+
+teams_html_content += """        </ul>
+        <div class="hint">
+            <strong>Tip:</strong> Press <code>Ctrl + A</code>, then <code>Ctrl + C</code> and paste directly into your Microsoft Teams chat!
+        </div>
+    </div>
+</body>
+</html>"""
+
+teams_html_file = os.path.join(BASE_DIR, "teams_message.html")
+with open(teams_html_file, "w", encoding="utf-8") as f:
+    f.write(teams_html_content)
+
+teams_md_lines = [
+    f"Hi All, below are automation test reports for each feature/project: {today_str}\n\n\n\n",
+    "Pipelines:\n"
+]
+for item in link_items:
+    teams_md_lines.append(f"- {item['name']}: [Pipelines - Run {item['build_id']}]({item['url']})\n")
+
+teams_md_file = os.path.join(BASE_DIR, "teams_message.md")
+with open(teams_md_file, "w", encoding="utf-8") as f:
+    f.writelines(teams_md_lines)
+
+print(f"\n[INFO] All report files exported:")
+print(f"  - Pipeline Links HTML:  {html_links_file}")
+print(f"  - Pipeline Links MD:    {md_links_file}")
+print(f"  - Teams Message HTML:   {teams_html_file}")
+print(f"  - Teams Message MD:     {teams_md_file}")
 
 try:
     wb.save(EXCEL_FILE)
