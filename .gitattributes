@@ -1,0 +1,2 @@
+# Exclude downloaded test reports and generated HTML exports from GitHub language statistics
+*.html linguist-generated=true
